@@ -9,6 +9,11 @@ import { uploadRouter } from './routes/upload';
 
 const app = express();
 
+// Derrière le reverse-proxy Infomaniak : faire confiance à 1 proxy.
+// Indispensable pour que req.ip / express-rate-limit lisent correctement X-Forwarded-For
+// (sans ça : ERR_ERL_UNEXPECTED_X_FORWARDED_FOR). 1 = un seul hop, pas de spoofing possible.
+app.set('trust proxy', 1);
+
 // Durcissement : ne pas révéler le framework
 app.disable('x-powered-by');
 
