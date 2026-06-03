@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+
+# Données persistées (la donnée vit ici) — ne pas committer, mais garder le dossier
+data/*
+!data/.gitkeep
