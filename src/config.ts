@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import path from 'path';
 
+const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+
 // Configuration centralisée (variables d'environnement). Aucun secret en dur.
 export const config = {
   port: Number(process.env.PORT) || 4000,
@@ -9,7 +11,9 @@ export const config = {
   adminPassword: process.env.ADMIN_PASSWORD || '',
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   pushApiKey: process.env.PUSH_API_KEY || '',
-  dataDir: process.env.DATA_DIR || path.join(process.cwd(), 'data'),
+  dataDir,
+  // Fichiers téléchargeables uploadés (persistants, servis sur /files).
+  uploadsDir: process.env.UPLOADS_DIR || path.join(dataDir, 'files'),
 };
 
 export function corsOriginOption(): boolean | string[] {

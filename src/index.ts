@@ -1,9 +1,11 @@
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import { config, corsOriginOption } from './config';
 import { authRouter } from './auth';
 import { contentRouter } from './routes/content';
 import { pushRouter } from './routes/push';
+import { uploadRouter } from './routes/upload';
 
 const app = express();
 
@@ -26,6 +28,17 @@ app.use('/api', contentRouter);
 
 // B06 — Temps réel : POST /api/push (clé) + GET /api/leaderboard + GET /api/users/:id
 app.use('/api', pushRouter);
+
+// Upload de fichiers téléchargeables : POST /api/admin/upload (auth)
+app.use('/api', uploadRouter);
+
+// Service des fichiers déposés, forcés en téléchargement.
+app.use(
+  '/files',
+  express.static(path.resolve(config.uploadsDir), {
+    setHeaders: (res) => res.setHeader('Content-Disposition', 'attachment'),
+  }),
+);
 
 app.listen(config.port, () => {
   // eslint-disable-next-line no-console
