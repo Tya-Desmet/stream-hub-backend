@@ -7,6 +7,9 @@ import { pushRouter } from './routes/push';
 
 const app = express();
 
+// Durcissement : ne pas révéler le framework
+app.disable('x-powered-by');
+
 app.use(cors({ origin: corsOriginOption() }));
 app.use(express.json({ limit: '1mb' }));
 
