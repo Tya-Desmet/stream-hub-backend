@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config, corsOriginOption } from './config';
 import { authRouter } from './auth';
 import { contentRouter } from './routes/content';
+import { pushRouter } from './routes/push';
 
 const app = express();
 
@@ -20,8 +21,8 @@ app.use('/api/admin', authRouter);
 // B03 — Contenu éditorial : GET /api/content[/:kind] (public) + POST /api/admin/content/:kind (auth)
 app.use('/api', contentRouter);
 
-// Routers montés dans les lots suivants :
-//   B06 : /api/push, /api/leaderboard, /api/users/:id
+// B06 — Temps réel : POST /api/push (clé) + GET /api/leaderboard + GET /api/users/:id
+app.use('/api', pushRouter);
 
 app.listen(config.port, () => {
   // eslint-disable-next-line no-console
