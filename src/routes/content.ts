@@ -15,7 +15,7 @@ const FILE: Record<Kind, string> = {
 
 const FALLBACK: Record<Kind, unknown> = {
   friends: [],
-  schedule: { days: [] },
+  schedule: { timezone: 'France (CET)', weeks: {} },
   resources: [],
   site: { theme: 'shibuya', twitchChannel: '' },
 };
@@ -29,9 +29,11 @@ function validate(kind: Kind, body: unknown): string | null {
   if (kind === 'friends' || kind === 'resources') {
     if (!Array.isArray(body)) return 'Format attendu : tableau JSON.';
   } else if (kind === 'schedule') {
-    const b = body as { days?: unknown };
-    if (typeof body !== 'object' || body === null || !Array.isArray(b.days)) {
-      return 'Format attendu : { days: [...] }.';
+    const b = body as { weeks?: unknown; days?: unknown };
+    const okNew = typeof b?.weeks === 'object' && b.weeks !== null && !Array.isArray(b.weeks);
+    const okLegacy = Array.isArray(b?.days); // ancienne forme encore tolérée
+    if (typeof body !== 'object' || body === null || (!okNew && !okLegacy)) {
+      return 'Format attendu : { weeks: { "YYYY-MM-DD": { days: [...] } } }.';
     }
   } else if (kind === 'site') {
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
