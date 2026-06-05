@@ -118,13 +118,28 @@ eventsRouter.post('/events/:slug/register', registerLimiter, (req: Request, res:
   const { ok, errors, clean } = validateSubmission(ev, body.values || {});
   if (!ok) return res.status(400).json({ error: 'Champs invalides.', errors });
 
+  const subs = loadSubs(ev.slug);
+
+  // Anti-doublon : une seule inscription par identifiant (Discord en priorité,
+  // sinon Riot/Minecraft/Twitch/email, sinon le 1er champ texte). Empêche les
+  // inscriptions à l'infini (notamment sur les giveaways).
+  const idField =
+    ev.fields.find((f) => f.type === 'discord') ||
+    ev.fields.find((f) => ['riot', 'minecraft', 'twitch', 'email'].includes(f.type)) ||
+    ev.fields.find((f) => f.type === 'text');
+  if (idField) {
+    const v = String(clean[idField.key] ?? '').trim().toLowerCase();
+    if (v && subs.some((s) => String(s.values[idField.key] ?? '').trim().toLowerCase() === v)) {
+      return res.status(409).json({ error: `Tu es déjà inscrit avec ce ${idField.label}.` });
+    }
+  }
+
   const sub: Submission = {
     id: crypto.randomUUID(),
     at: Date.now(),
     ip: req.ip,
     values: clean,
   };
-  const subs = loadSubs(ev.slug);
   subs.push(sub);
   write(subsFile(ev.slug), subs);
 
