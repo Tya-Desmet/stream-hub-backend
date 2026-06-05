@@ -12,8 +12,12 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   pushApiKey: process.env.PUSH_API_KEY || '',
   dataDir,
-  // Fichiers téléchargeables uploadés (persistants, servis sur /files).
+  // Fichiers téléchargeables uploadés (persistants, servis sur /files, forcés en téléchargement).
   uploadsDir: process.env.UPLOADS_DIR || path.join(dataDir, 'files'),
+  // Images affichables inline (avatars streamers, logos partenaires, bannières), servies sur /img.
+  imagesDir: process.env.IMAGES_DIR || path.join(dataDir, 'images'),
+  // Webhook Discord (notifications d'inscription événement). Optionnel.
+  discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL || '',
 };
 
 export function corsOriginOption(): boolean | string[] {

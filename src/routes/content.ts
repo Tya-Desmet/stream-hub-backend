@@ -3,21 +3,25 @@ import { read, write } from '../store';
 import { requireAuth } from '../auth';
 
 // Contenu éditorial servi/persisté. Forme = identique aux content/*.json du site.
-const KINDS = ['friends', 'schedule', 'resources', 'site'] as const;
+const KINDS = ['friends', 'partners', 'schedule', 'resources', 'site', 'events'] as const;
 type Kind = (typeof KINDS)[number];
 
 const FILE: Record<Kind, string> = {
   friends: 'friends.json',
+  partners: 'partners.json',
   schedule: 'schedule.json',
   resources: 'resources.json',
   site: 'site.json',
+  events: 'events.json',
 };
 
 const FALLBACK: Record<Kind, unknown> = {
   friends: [],
+  partners: [],
   schedule: { timezone: 'France (CET)', weeks: {} },
   resources: [],
   site: { theme: 'shibuya', twitchChannel: '' },
+  events: [],
 };
 
 function isKind(k: string): k is Kind {
@@ -26,8 +30,17 @@ function isKind(k: string): k is Kind {
 
 // Validation de forme basique avant écriture.
 function validate(kind: Kind, body: unknown): string | null {
-  if (kind === 'friends' || kind === 'resources') {
+  if (kind === 'friends' || kind === 'resources' || kind === 'partners') {
     if (!Array.isArray(body)) return 'Format attendu : tableau JSON.';
+  } else if (kind === 'events') {
+    if (!Array.isArray(body)) return 'Format attendu : tableau d\'événements.';
+    for (const ev of body as Array<Record<string, unknown>>) {
+      if (!ev || typeof ev !== 'object') return 'Événement invalide.';
+      if (typeof ev.slug !== 'string' || !/^[a-z0-9-]{1,64}$/.test(ev.slug)) {
+        return 'Chaque événement doit avoir un slug en minuscules (a-z, 0-9, -).';
+      }
+      if (!Array.isArray(ev.fields)) return 'Chaque événement doit avoir un tableau `fields`.';
+    }
   } else if (kind === 'schedule') {
     const b = body as { weeks?: unknown; days?: unknown };
     const okNew = typeof b?.weeks === 'object' && b.weeks !== null && !Array.isArray(b.weeks);

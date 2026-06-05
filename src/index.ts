@@ -6,6 +6,7 @@ import { authRouter } from './auth';
 import { contentRouter } from './routes/content';
 import { pushRouter } from './routes/push';
 import { uploadRouter } from './routes/upload';
+import { eventsRouter } from './routes/events';
 
 const app = express();
 
@@ -37,11 +38,23 @@ app.use('/api', pushRouter);
 // Upload de fichiers téléchargeables : POST /api/admin/upload (auth)
 app.use('/api', uploadRouter);
 
+// Événements & inscriptions : GET /api/events[/:slug] (public) + register + admin (submissions, draw)
+app.use('/api', eventsRouter);
+
 // Service des fichiers déposés, forcés en téléchargement.
 app.use(
   '/files',
   express.static(path.resolve(config.uploadsDir), {
     setHeaders: (res) => res.setHeader('Content-Disposition', 'attachment'),
+  }),
+);
+
+// Service des images affichables inline (avatars, logos, bannières) — cache long.
+app.use(
+  '/img',
+  express.static(path.resolve(config.imagesDir), {
+    maxAge: '7d',
+    setHeaders: (res) => res.setHeader('Cache-Control', 'public, max-age=604800'),
   }),
 );
 
