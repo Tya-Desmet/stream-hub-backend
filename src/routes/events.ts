@@ -2,9 +2,10 @@ import crypto from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { read, write } from '../store';
-import { requireAuth } from '../auth';
+import { requireRole } from '../auth';
 import { config } from '../config';
 import { validateSubmission, submissionLabel, type EventDef } from '../lib/fields';
+import { verifyViewer, type ViewerIdentity } from './authTwitch';
 
 // ── Helpers store ──────────────────────────────────────────────────────────
 function loadEvents(): EventDef[] {
@@ -21,7 +22,13 @@ function findEvent(slug: string): EventDef | undefined {
 function subsFile(slug: string): string {
   return `submissions/${slug.replace(/[^a-z0-9-]/gi, '_')}.json`;
 }
-type Submission = { id: string; at: number; ip?: string; values: Record<string, string | boolean> };
+type Submission = {
+  id: string;
+  at: number;
+  ip?: string;
+  values: Record<string, string | boolean>;
+  account?: ViewerIdentity; // identité Twitch vérifiée (giveaways)
+};
 function loadSubs(slug: string): Submission[] {
   const list = read<Submission[]>(subsFile(slug), []);
   return Array.isArray(list) ? list : [];
@@ -53,12 +60,15 @@ function publicView(ev: EventDef) {
 }
 
 // ── Webhook Discord (fire-and-forget) ───────────────────────────────────────
-function notifyDiscord(ev: EventDef, values: Record<string, string | boolean>): void {
+function notifyDiscord(ev: EventDef, values: Record<string, string | boolean>, account?: ViewerIdentity): void {
   const url = ev.webhookUrl || config.discordWebhookUrl;
   if (!url) return;
   const fields = ev.fields
     .filter((f) => values[f.key] !== undefined && values[f.key] !== '')
     .map((f) => ({ name: f.label, value: String(values[f.key]).slice(0, 256), inline: true }));
+  if (account) {
+    fields.unshift({ name: 'Twitch (vérifié)', value: account.name || account.login, inline: true });
+  }
   const payload = {
     embeds: [
       {
@@ -102,7 +112,7 @@ eventsRouter.get('/events/:slug', (req: Request, res: Response) => {
 
 // POST /api/events/:slug/register (public) → inscription
 eventsRouter.post('/events/:slug/register', registerLimiter, (req: Request, res: Response) => {
-  const body = (req.body || {}) as { values?: Record<string, unknown>; _hp?: unknown };
+  const body = (req.body || {}) as { values?: Record<string, unknown>; _hp?: unknown; viewerToken?: unknown };
 
   const ev = findEvent(req.params.slug);
   const defaultMsg = ev?.confirmation || 'Inscription bien enregistrée ✓';
@@ -115,14 +125,30 @@ eventsRouter.post('/events/:slug/register', registerLimiter, (req: Request, res:
   if (!ev) return res.status(404).json({ error: 'Événement introuvable.' });
   if (!isOpen(ev)) return res.status(403).json({ error: 'Les inscriptions sont fermées.' });
 
+  // Giveaway → identité Twitch vérifiée obligatoire (1 entrée par compte).
+  let account: ViewerIdentity | undefined;
+  if (ev.type === 'giveaway') {
+    const header = req.headers.authorization || '';
+    const m = header.match(/^Bearer\s+(.+)$/i);
+    const tok = m ? m[1] : typeof body.viewerToken === 'string' ? body.viewerToken : '';
+    const id = verifyViewer(tok);
+    if (!id) {
+      return res.status(401).json({ error: 'Connecte-toi avec Twitch pour participer au tirage.' });
+    }
+    account = id;
+  }
+
   const { ok, errors, clean } = validateSubmission(ev, body.values || {});
   if (!ok) return res.status(400).json({ error: 'Champs invalides.', errors });
 
   const subs = loadSubs(ev.slug);
 
-  // Anti-doublon : une seule inscription par identifiant (Discord en priorité,
-  // sinon Riot/Minecraft/Twitch/email, sinon le 1er champ texte). Empêche les
-  // inscriptions à l'infini (notamment sur les giveaways).
+  // Anti-doublon prioritaire : compte Twitch (giveaway) → infalsifiable.
+  if (account && subs.some((s) => s.account?.provider === 'twitch' && s.account.id === account!.id)) {
+    return res.status(409).json({ error: 'Tu participes déjà à ce tirage avec ce compte Twitch.' });
+  }
+
+  // Sinon, anti-doublon par identifiant texte (Discord en priorité, sinon Riot/MC/Twitch/email/texte).
   const idField =
     ev.fields.find((f) => f.type === 'discord') ||
     ev.fields.find((f) => ['riot', 'minecraft', 'twitch', 'email'].includes(f.type)) ||
@@ -139,16 +165,30 @@ eventsRouter.post('/events/:slug/register', registerLimiter, (req: Request, res:
     at: Date.now(),
     ip: req.ip,
     values: clean,
+    ...(account ? { account } : {}),
   };
   subs.push(sub);
   write(subsFile(ev.slug), subs);
 
-  notifyDiscord(ev, clean);
+  notifyDiscord(ev, clean, account);
 
   return res.json({ ok: true, message: defaultMsg });
 });
 
-// ── Admin ───────────────────────────────────────────────────────────────────
+// ── Admin / Modo ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/events (admin|mod) → liste TOUS les events (le GET public ne renvoie que les ouverts).
+eventsRouter.get('/admin/events', requireRole('admin', 'mod'), (_req: Request, res: Response) => {
+  res.json(
+    loadEvents().map((e) => ({
+      slug: e.slug,
+      title: e.title,
+      type: e.type,
+      open: e.open,
+      count: loadSubs(e.slug).length,
+    })),
+  );
+});
 
 function toCsv(ev: EventDef, subs: Submission[]): string {
   const cols = ['at', ...ev.fields.map((f) => f.key)];
@@ -164,7 +204,7 @@ function toCsv(ev: EventDef, subs: Submission[]): string {
 }
 
 // GET /api/admin/events/:slug/submissions (auth) [?format=csv]
-eventsRouter.get('/admin/events/:slug/submissions', requireAuth, (req: Request, res: Response) => {
+eventsRouter.get('/admin/events/:slug/submissions', requireRole('admin', 'mod'), (req: Request, res: Response) => {
   const ev = findEvent(req.params.slug);
   if (!ev) return res.status(404).json({ error: 'Événement introuvable.' });
   const subs = loadSubs(ev.slug);
@@ -177,7 +217,7 @@ eventsRouter.get('/admin/events/:slug/submissions', requireAuth, (req: Request, 
 });
 
 // POST /api/admin/events/:slug/draw (auth) { count, excludeWinners } → tirage
-eventsRouter.post('/admin/events/:slug/draw', requireAuth, (req: Request, res: Response) => {
+eventsRouter.post('/admin/events/:slug/draw', requireRole('admin', 'mod'), (req: Request, res: Response) => {
   const list = loadEvents();
   const ev = list.find((e) => e.slug === req.params.slug);
   if (!ev) return res.status(404).json({ error: 'Événement introuvable.' });

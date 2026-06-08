@@ -3,7 +3,7 @@ import path from 'path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { config } from '../config';
-import { requireAuth } from '../auth';
+import { requireRole } from '../auth';
 
 // Nom de fichier sûr (pas de traversal, caractères contrôlés).
 function safeFileName(original: string): string {
@@ -45,14 +45,14 @@ const uploadImage = multer({
 export const uploadRouter = Router();
 
 // POST /api/admin/upload (auth) — dépose un fichier téléchargeable.
-uploadRouter.post('/admin/upload', requireAuth, upload.single('file'), (req: Request, res: Response) => {
+uploadRouter.post('/admin/upload', requireRole('admin'), upload.single('file'), (req: Request, res: Response) => {
   const f = req.file;
   if (!f) return res.status(400).json({ error: 'Aucun fichier reçu.' });
   return res.json({ name: f.filename, size: f.size, path: `/files/${f.filename}` });
 });
 
 // POST /api/admin/upload-image (auth) — dépose une image affichable inline (servie sur /img).
-uploadRouter.post('/admin/upload-image', requireAuth, uploadImage.single('file'), (req: Request, res: Response) => {
+uploadRouter.post('/admin/upload-image', requireRole('admin'), uploadImage.single('file'), (req: Request, res: Response) => {
   const f = req.file;
   if (!f) return res.status(400).json({ error: 'Image invalide (png/jpeg/webp/gif/svg, ≤ 5 Mo).' });
   return res.json({ name: f.filename, size: f.size, path: `/img/${f.filename}` });

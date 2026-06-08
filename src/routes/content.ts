@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { read, write } from '../store';
-import { requireAuth } from '../auth';
+import { requireRole } from '../auth';
 
 // Contenu éditorial servi/persisté. Forme = identique aux content/*.json du site.
 const KINDS = ['friends', 'partners', 'schedule', 'resources', 'site', 'events'] as const;
@@ -73,7 +73,7 @@ contentRouter.get('/content/:kind', (req: Request, res: Response) => {
 });
 
 // POST /api/admin/content/:kind (auth) → remplace le contenu après validation
-contentRouter.post('/admin/content/:kind', requireAuth, (req: Request, res: Response) => {
+contentRouter.post('/admin/content/:kind', requireRole('admin'), (req: Request, res: Response) => {
   const kind = req.params.kind;
   if (!isKind(kind)) return res.status(400).json({ error: 'Type de contenu inconnu.' });
   const err = validate(kind, req.body);

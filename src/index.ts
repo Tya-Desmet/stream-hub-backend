@@ -7,6 +7,7 @@ import { contentRouter } from './routes/content';
 import { pushRouter } from './routes/push';
 import { uploadRouter } from './routes/upload';
 import { eventsRouter } from './routes/events';
+import { authTwitchRouter } from './routes/authTwitch';
 
 const app = express();
 
@@ -40,6 +41,9 @@ app.use('/api', uploadRouter);
 
 // Événements & inscriptions : GET /api/events[/:slug] (public) + register + admin (submissions, draw)
 app.use('/api', eventsRouter);
+
+// Login Twitch des viewers (giveaways) : GET /api/auth/twitch/login + /callback
+app.use('/api', authTwitchRouter);
 
 // Service des fichiers déposés, forcés en téléchargement.
 app.use(
